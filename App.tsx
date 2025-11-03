@@ -670,11 +670,15 @@ const App: React.FC = () => {
         status: 'published',
         shareToken: token,
       };
+
+      // Check if there's already a published version with the same ID
+      const existingPublished = publishedMeets.find((m) => m.id === selectedMetadata.id);
+      
       const { metadata, sha } = await saveShareToGitHub(
         data,
         'published',
         shareStoragePreferences,
-        selectedMetadata,
+        existingPublished || (selectedMetadata.status === 'published' ? selectedMetadata : undefined),
       );
       const updatedMetadata = createMeetMetadata(data, metadata, sha);
       syncMeetLists(updatedMetadata, data);
@@ -719,10 +723,63 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRemovePublishedLink = (id: string) => {
+  const handleUnpublish = async (id: string) => {
     const metadata = publishedMeets.find((item) => item.id === id);
-    if (metadata) {
-      void handleDelete(metadata);
+    if (!metadata) {
+      return;
+    }
+    if (!ensureStorageConfigured(shareStoragePreferences)) {
+      setEditorError('Configure GitHub storage before unpublishing meets.');
+      return;
+    }
+    try {
+      setEditorLoading(true);
+      setEditorError(null);
+      setEditorMessage(null);
+
+      // Get the published data
+      let data = meetCacheRef.current.get(metadata.id);
+      if (!data) {
+        const fetched = await fetchStoredShareData(metadata.storage, shareStoragePreferences);
+        data = fetched.data;
+      }
+
+      // Remove shareToken and change status back to draft
+      const draftData: StoredShareData = {
+        ...data,
+        status: 'draft',
+        shareToken: undefined,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Save to drafts folder (this will create new file in drafts/)
+      const { metadata: draftMetadata, sha } = await saveShareToGitHub(
+        draftData,
+        'draft',
+        shareStoragePreferences,
+        undefined, // Don't pass existing metadata so it creates fresh in drafts
+      );
+
+      // Delete from published folder
+      await deleteShareFromGitHub(
+        metadata.storage,
+        metadata.sha,
+        shareStoragePreferences,
+      );
+
+      // Update state
+      const newDraftMetadata = createMeetMetadata(draftData, draftMetadata, sha);
+      meetCacheRef.current.set(newDraftMetadata.id, draftData);
+      meetCacheRef.current.delete(metadata.id);
+      
+      setPublishedMeets((prev) => prev.filter((item) => item.id !== metadata.id));
+      setDraftMeets((prev) => [newDraftMetadata, ...prev.filter((m) => m.id !== newDraftMetadata.id)]);
+      
+      setEditorMessage('Meet unpublished and moved back to drafts.');
+    } catch (err) {
+      setEditorError(err instanceof Error ? err.message : 'Failed to unpublish meet.');
+    } finally {
+      setEditorLoading(false);
     }
   };
 
@@ -887,7 +944,7 @@ const App: React.FC = () => {
             sharedGeneratedAt={sharedGeneratedAt}
             formatDateTime={formatDateTime}
             publishedLinks={publishedLinks}
-            onRemovePublishedLink={handleRemovePublishedLink}
+            onRemovePublishedLink={handleUnpublish}
           />
         )}
       </main>

@@ -53,9 +53,9 @@ const PublishedLinks: React.FC<PublishedLinksProps> = ({ links, onRemove }) => {
               <button
                 type="button"
                 onClick={() => onRemove(link.id)}
-                className="px-3 py-1.5 text-sm font-semibold text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                className="px-3 py-1.5 text-sm font-semibold text-orange-600 border border-orange-200 rounded-md hover:bg-orange-50 transition-colors"
               >
-                Remove
+                Unpublish
               </button>
             </div>
           </li>

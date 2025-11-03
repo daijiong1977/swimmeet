@@ -66,7 +66,7 @@ const SharedTab: React.FC<SharedTabProps> = ({
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow">
         <h2 className="text-2xl font-semibold text-brand-dark">Published meet links</h2>
         <p className="text-sm text-gray-500">
-          Copy a link below or remove it to revoke access. Publish from the Drafts tab to add more.
+          Copy a link below or unpublish to move it back to drafts. Publish from the Drafts tab to add more.
         </p>
       </div>
       <PublishedLinks links={publishedLinks} onRemove={onRemovePublishedLink} />
