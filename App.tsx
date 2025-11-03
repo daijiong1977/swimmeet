@@ -291,7 +291,8 @@ const App: React.FC = () => {
         
         if (uuidPattern.test(decodedToken)) {
           // New format: UUID - fetch from published JSON file
-          const fileUrl = `${window.location.origin}/public/shares/published/${decodedToken}.json`;
+          // Files in public/ folder are served from root in production
+          const fileUrl = `${window.location.origin}/shares/published/${decodedToken}.json`;
           const response = await fetch(fileUrl);
           if (!response.ok) {
             throw new Error('Published meet not found or has been unpublished.');
