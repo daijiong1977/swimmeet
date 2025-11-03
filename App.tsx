@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
 import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent } from './types';
 import { extractMeetDataFromImages } from './services/geminiService';
 import FileUpload from './components/FileUpload';
@@ -16,36 +17,64 @@ const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
 const SHARE_VERSION = 1;
 const PUBLISHED_LINKS_STORAGE_KEY = 'PUBLISHED_MEETS_V1';
 
-const encodeSharePayload = (payload: SharePayload): string => {
-  const json = JSON.stringify(payload);
+const SHARE_TOKEN_PREFIX_LZ = 'lz:';
+const SHARE_TOKEN_PREFIX_B64 = 'b64:';
+
+const base64Encode = (input: string): string => {
   if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
-    return window.btoa(unescape(encodeURIComponent(json)));
+    return window.btoa(unescape(encodeURIComponent(input)));
   }
   if (typeof globalThis !== 'undefined') {
     const globalBuffer = (globalThis as any).Buffer;
     if (globalBuffer) {
-      return globalBuffer.from(json, 'utf-8').toString('base64');
+      return globalBuffer.from(input, 'utf-8').toString('base64');
     }
   }
-  return json;
+  return input;
+};
+
+const base64Decode = (input: string): string => {
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    return decodeURIComponent(escape(window.atob(input)));
+  }
+  if (typeof globalThis !== 'undefined') {
+    const globalBuffer = (globalThis as any).Buffer;
+    if (globalBuffer) {
+      return globalBuffer.from(input, 'base64').toString('utf-8');
+    }
+  }
+  return input;
+};
+
+const encodeSharePayload = (payload: SharePayload): string => {
+  const json = JSON.stringify(payload);
+  const compressed = compressToEncodedURIComponent(json);
+  if (compressed) {
+    return `${SHARE_TOKEN_PREFIX_LZ}${compressed}`;
+  }
+  const fallback = base64Encode(json);
+  return `${SHARE_TOKEN_PREFIX_B64}${fallback}`;
 };
 
 const decodeSharePayload = (token: string): SharePayload => {
-  let json: string;
-  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-    json = decodeURIComponent(escape(window.atob(token)));
-  } else if (typeof globalThis !== 'undefined') {
-    const globalBuffer = (globalThis as any).Buffer;
-    if (globalBuffer) {
-      json = globalBuffer.from(token, 'base64').toString('utf-8');
-    } else {
-      json = token;
+  let json: string | null = null;
+
+  if (token.startsWith(SHARE_TOKEN_PREFIX_LZ)) {
+    const payload = decompressFromEncodedURIComponent(token.slice(SHARE_TOKEN_PREFIX_LZ.length));
+    if (payload) {
+      json = payload;
     }
-  } else {
-    json = token;
   }
-  const payload = JSON.parse(json) as SharePayload;
-  return payload;
+
+  if (!json) {
+    const base64Token = token.startsWith(SHARE_TOKEN_PREFIX_B64)
+      ? token.slice(SHARE_TOKEN_PREFIX_B64.length)
+      : token;
+    json = base64Decode(base64Token);
+  }
+
+  const parsed = JSON.parse(json) as SharePayload;
+  return parsed;
 };
 
 
