@@ -232,8 +232,8 @@ const App: React.FC = () => {
 
         if (needsGeminiKey || needsGithubConfig) {
           const [geminiRes, githubRes] = await Promise.all([
-            needsGeminiKey ? fetch('https://emailapi.6ray.com/gemini_api') : null,
-            needsGithubConfig ? fetch('https://emailapi.6ray.com/github_api') : null,
+            needsGeminiKey ? fetch('https://emailapi.6ray.com/ai/apikey') : null,
+            needsGithubConfig ? fetch('https://emailapi.6ray.com/github/token') : null,
           ]);
 
           // Load Gemini API key if not in localStorage
