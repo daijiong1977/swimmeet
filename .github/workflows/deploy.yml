@@ -32,6 +32,8 @@ jobs:
         run: npm run build
         env:
           BASE_PATH: '/'
+          ROLLUP_SKIP_NODEJS_NATIVE: 'true'
+          ROLLUP_SKIP_NATIVE: 'true'
 
       - name: Copy CNAME into artifact
         if: ${{ hashFiles('CNAME') != '' }}
@@ -56,7 +58,6 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           static_site_generator: vite
-          custom_domain: swimmeet.6ray.com
 
       - name: Deploy to GitHub Pages
         id: deployment
