@@ -36,7 +36,8 @@ export const encodeSharePayload = (payload: SharePayload): string => {
   const json = JSON.stringify(payload);
   const compressed = compressToBase64(json);
   if (compressed) {
-    return compressed;
+    // Convert to URL-safe base64: replace + with -, / with _, and remove =
+    return compressed.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
   return base64Encode(json);
 };
@@ -44,8 +45,15 @@ export const encodeSharePayload = (payload: SharePayload): string => {
 export const decodeSharePayload = (token: string): SharePayload => {
   let json: string | null = null;
   
+  // Convert URL-safe base64 back to standard base64
+  let standardToken = token.replace(/-/g, '+').replace(/_/g, '/');
+  // Add back padding if needed
+  while (standardToken.length % 4 !== 0) {
+    standardToken += '=';
+  }
+  
   // Try lz-string base64 format first (new format)
-  json = decompressFromBase64(token);
+  json = decompressFromBase64(standardToken);
   
   // Fallback to old lz: prefix format for backward compatibility
   if (!json && token.startsWith('lz:')) {
