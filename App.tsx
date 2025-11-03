@@ -11,7 +11,7 @@ import DataActions from './components/DataActions';
 import ConfigPanel from './components/ConfigPanel';
 import SheetEmbed from './components/SheetEmbed';
 
-const DEFAULT_PDF_PROXY_URL = 'https://proxy.cors.sh/{{url}}';
+const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
 
 
 // Declaration for pdf.js library loaded from CDN

@@ -100,11 +100,11 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 id="pdfProxyUrl"
                 value={pdfProxyUrl}
                 onChange={(e) => setPdfProxyUrl(e.target.value)}
-                placeholder="https://proxy.cors.sh/{{url}}"
+                placeholder="https://api.allorigins.win/raw?url={{url}}"
                 className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
               />
               <p className="mt-1 text-xs text-gray-500">
-                Use <code className="bg-gray-200 px-1 rounded">{'{{url}}'}</code> as a placeholder for the PDF link. The default <code className="bg-gray-200 px-1 rounded">https://proxy.cors.sh/{'{{url}}'}</code> requires a free API key from cors.sh.
+                Use <code className="bg-gray-200 px-1 rounded">{'{{url}}'}</code> as a placeholder for the PDF link. The default <code className="bg-gray-200 px-1 rounded">{'https://api.allorigins.win/raw?url={{url}}'}</code> does not need an API key. For stricter hosts you can switch to <code className="bg-gray-200 px-1 rounded">{'https://proxy.cors.sh/{{url}}'}</code> (requires a free key).
               </p>
             </div>
             <div>
