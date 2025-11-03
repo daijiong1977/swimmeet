@@ -33,6 +33,7 @@ interface GenerateTabProps {
   setShareStoragePreferences: (value: ShareStoragePreferences) => void;
   onTestShareStorage: () => void;
   shareStorageTestState: ShareStorageTestState;
+  isProxyConfigured?: boolean;
 }
 
 const GenerateTab: React.FC<GenerateTabProps> = ({
@@ -60,6 +61,7 @@ const GenerateTab: React.FC<GenerateTabProps> = ({
   setShareStoragePreferences,
   onTestShareStorage,
   shareStorageTestState,
+  isProxyConfigured = false,
 }) => (
   <div className="space-y-6">
     <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow">
@@ -107,6 +109,7 @@ const GenerateTab: React.FC<GenerateTabProps> = ({
       setShareStoragePreferences={setShareStoragePreferences}
       onTestShareStorage={onTestShareStorage}
       shareStorageTestState={shareStorageTestState}
+      isProxyConfigured={isProxyConfigured}
     />
   </div>
 );

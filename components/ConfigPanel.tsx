@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { GeminiModel, ShareStoragePreferences, ShareStorageTestState } from '../types';
 
@@ -18,6 +17,7 @@ interface ConfigPanelProps {
   setShareStoragePreferences: (prefs: ShareStoragePreferences) => void;
   onTestShareStorage: () => void;
   shareStorageTestState: ShareStorageTestState;
+  isProxyConfigured?: boolean; // New prop to indicate proxy is providing config
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({
@@ -35,7 +35,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   shareStoragePreferences,
   setShareStoragePreferences,
   onTestShareStorage,
-  shareStorageTestState
+  shareStorageTestState,
+  isProxyConfigured = false
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -60,6 +61,31 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
         <div className="p-6 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* API and Model Settings */}
           <div className="space-y-6">
+            {isProxyConfigured ? (
+              // When proxy configured, only show model selection and a notice
+              <>
+                <div className="p-4 bg-green-50 border-l-4 border-green-400 text-green-700 text-sm">
+                  <p><strong>✓ Auto-configured</strong></p>
+                  <p className="mt-1">API credentials are automatically provided. You can still customize settings below if needed.</p>
+                </div>
+                <div>
+                  <label htmlFor="model" className="block text-sm font-medium text-gray-700">
+                    AI Model (for accuracy vs. speed)
+                  </label>
+                  <select
+                    id="model"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value as GeminiModel)}
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan sm:text-sm rounded-md"
+                  >
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (Faster)</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Accurate)</option>
+                  </select>
+                </div>
+              </>
+            ) : (
+              // When NOT proxy configured, show all fields
+              <>
             <div>
               <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700">
                 Gemini API Key
@@ -105,6 +131,8 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Accurate)</option>
               </select>
             </div>
+            </>
+            )}
             <div>
               <div className="flex items-center justify-between">
                 <label htmlFor="pdfProxyUrl" className="block text-sm font-medium text-gray-700">
@@ -175,6 +203,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
             </div>
           </div>
 
+          {!isProxyConfigured && (
           <div className="space-y-4">
             <h3 className="font-semibold text-gray-800">Share Link Storage (GitHub)</h3>
             <p className="text-sm text-gray-600">
@@ -278,6 +307,7 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
               )}
             </div>
           </div>
+          )}
         </div>
       )}
     </div>

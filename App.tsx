@@ -1024,6 +1024,7 @@ const App: React.FC = () => {
             setShareStoragePreferences={setShareStoragePreferences}
             onTestShareStorage={handleTestShareStorage}
             shareStorageTestState={shareStorageTestState}
+            isProxyConfigured={isProxyConfigRef.current.apiKey || isProxyConfigRef.current.githubConfig}
           />
         )}
 
