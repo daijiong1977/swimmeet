@@ -6,13 +6,19 @@ interface EventTableProps {
   events: SwimEvent[];
   onUpdateEvent: (event: SwimEvent) => void;
   onDeleteEvent: (eventId: string) => void;
+  readOnly?: boolean;
 }
 
-const EventTable: React.FC<EventTableProps> = ({ events, onUpdateEvent, onDeleteEvent }) => {
+const EventTable: React.FC<EventTableProps> = ({ events, onUpdateEvent, onDeleteEvent, readOnly = false }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<SwimEvent | null>(null);
 
+  const canModify = !readOnly;
+
   const handleEditClick = (event: SwimEvent) => {
+    if (!canModify) {
+      return;
+    }
     setEditingId(event.id);
     setEditFormData({ ...event });
   };
@@ -71,6 +77,13 @@ const EventTable: React.FC<EventTableProps> = ({ events, onUpdateEvent, onDelete
     </tr>
   );
   
+  const renderRowActions = (event: SwimEvent) => (
+    <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
+      <button onClick={() => handleEditClick(event)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+      <button onClick={() => onDeleteEvent(event.id)} className="text-red-600 hover:text-red-900">Delete</button>
+    </td>
+  );
+
   const renderReadOnlyRow = (event: SwimEvent) => (
       <tr key={event.id} className="hover:bg-brand-teal hover:bg-opacity-20 transition-colors">
         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">{event.eventNumber}</td>
@@ -80,10 +93,7 @@ const EventTable: React.FC<EventTableProps> = ({ events, onUpdateEvent, onDelete
         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{event.distance}</td>
         <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-700">{event.stroke}</td>
         <td className="px-4 py-3 text-sm text-gray-500 italic">{event.originalDescription}</td>
-        <td className="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-          <button onClick={() => handleEditClick(event)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
-          <button onClick={() => onDeleteEvent(event.id)} className="text-red-600 hover:text-red-900">Delete</button>
-        </td>
+        {canModify && renderRowActions(event)}
       </tr>
   );
 
@@ -99,12 +109,12 @@ const EventTable: React.FC<EventTableProps> = ({ events, onUpdateEvent, onDelete
             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distance</th>
             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stroke</th>
             <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Description</th>
-            <th scope="col" className="relative px-4 py-3"><span className="sr-only">Actions</span></th>
+            {canModify && <th scope="col" className="relative px-4 py-3"><span className="sr-only">Actions</span></th>}
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {events.map((event) => (
-            editingId === event.id ? renderEditableRow(event) : renderReadOnlyRow(event)
+            canModify && editingId === event.id ? renderEditableRow(event) : renderReadOnlyRow(event)
           ))}
         </tbody>
       </table>

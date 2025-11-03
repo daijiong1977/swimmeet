@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel } from './types';
+import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent } from './types';
 import { extractMeetDataFromImages } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import EventTable from './components/EventTable';
@@ -10,8 +10,43 @@ import MeetInfoDisplay from './components/MeetInfoDisplay';
 import DataActions from './components/DataActions';
 import ConfigPanel from './components/ConfigPanel';
 import SheetEmbed from './components/SheetEmbed';
+import PublishedLinks from './components/PublishedLinks';
 
 const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
+const SHARE_VERSION = 1;
+const PUBLISHED_LINKS_STORAGE_KEY = 'PUBLISHED_MEETS_V1';
+
+const encodeSharePayload = (payload: SharePayload): string => {
+  const json = JSON.stringify(payload);
+  if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+    return window.btoa(unescape(encodeURIComponent(json)));
+  }
+  if (typeof globalThis !== 'undefined') {
+    const globalBuffer = (globalThis as any).Buffer;
+    if (globalBuffer) {
+      return globalBuffer.from(json, 'utf-8').toString('base64');
+    }
+  }
+  return json;
+};
+
+const decodeSharePayload = (token: string): SharePayload => {
+  let json: string;
+  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+    json = decodeURIComponent(escape(window.atob(token)));
+  } else if (typeof globalThis !== 'undefined') {
+    const globalBuffer = (globalThis as any).Buffer;
+    if (globalBuffer) {
+      json = globalBuffer.from(token, 'base64').toString('utf-8');
+    } else {
+      json = token;
+    }
+  } else {
+    json = token;
+  }
+  const payload = JSON.parse(json) as SharePayload;
+  return payload;
+};
 
 
 // Declaration for pdf.js library loaded from CDN
@@ -163,6 +198,27 @@ const App: React.FC = () => {
   const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash');
   const [googleSheetUrl, setGoogleSheetUrl] = useState<string>('');
 
+  const [isSharedView, setIsSharedView] = useState<boolean>(false);
+  const [sharedError, setSharedError] = useState<string | null>(null);
+  const [shareMetadata, setShareMetadata] = useState<{ generatedAt: string } | null>(null);
+  const [publishResult, setPublishResult] = useState<{ url: string; copied: boolean } | null>(null);
+  const [publishedLinks, setPublishedLinks] = useState<PublishedLink[]>(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    try {
+      const stored = localStorage.getItem(PUBLISHED_LINKS_STORAGE_KEY);
+      if (!stored) {
+        return [];
+      }
+      const parsed = JSON.parse(stored) as PublishedLink[];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.warn('Failed to parse published links from storage:', err);
+      return [];
+    }
+  });
+
   const [filters, setFilters] = useState<FilterOptions>({
     day: 'all',
     ageGroup: 'all',
@@ -220,8 +276,58 @@ const App: React.FC = () => {
     }
   }, [pdfProxyApiKey]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    try {
+      localStorage.setItem(PUBLISHED_LINKS_STORAGE_KEY, JSON.stringify(publishedLinks));
+    } catch (err) {
+      console.warn('Failed to persist published links:', err);
+    }
+  }, [publishedLinks]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const sharedToken = params.get('shared');
+    if (!sharedToken) {
+      return;
+    }
+    try {
+      const payload = decodeSharePayload(sharedToken);
+      if (payload.version && payload.version > SHARE_VERSION) {
+        throw new Error('Unsupported share link version');
+      }
+      if (!payload || !payload.meetInfo || !Array.isArray(payload.events)) {
+        throw new Error('Malformed shared payload');
+      }
+      setIsSharedView(true);
+      setShareMetadata({ generatedAt: payload.generatedAt });
+      setSharedError(null);
+      const restoredEvents: SwimEvent[] = payload.events.map((event) => ({
+        ...event,
+        id: crypto.randomUUID(),
+      }));
+      setMeetInfo(payload.meetInfo);
+      setEvents(restoredEvents);
+      setFilters({ day: 'all', ageGroup: 'all', stroke: 'all', distance: 'all', gender: 'all' });
+      setFiles([]);
+      setPdfUrl('');
+      setError(null);
+    } catch (err) {
+      console.error('Failed to load shared view:', err);
+      setSharedError('Unable to load this shared meet. The link may be invalid or has been corrupted.');
+    }
+  }, []);
+
 
   const handleFileChange = (selectedFiles: FileList | null) => {
+    if (isSharedView) {
+      return;
+    }
     if (selectedFiles && selectedFiles.length > 0) {
       setFiles([selectedFiles[0]]);
       setPdfUrl('');
@@ -231,6 +337,9 @@ const App: React.FC = () => {
   };
   
   const handleUrlChange = (url: string) => {
+    if (isSharedView) {
+      return;
+    }
     setPdfUrl(url);
     if (url) {
         setFiles([]);
@@ -265,6 +374,9 @@ const App: React.FC = () => {
   };
 
   const handleExtract = useCallback(async () => {
+    if (isSharedView) {
+      return;
+    }
     if (!apiKey) {
       setError("Gemini API Key is not set. Please set it in the Configuration panel below before proceeding.");
       return;
@@ -315,17 +427,26 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [files, pdfUrl, apiKey, model]);
+  }, [files, pdfUrl, apiKey, model, isSharedView, pdfProxyApiKey, pdfProxyUrl]);
 
   const handleUpdateEvent = (updatedEvent: SwimEvent) => {
+    if (isSharedView) {
+      return;
+    }
     setEvents(prevEvents => prevEvents.map(event => event.id === updatedEvent.id ? updatedEvent : event));
   };
 
   const handleDeleteEvent = (eventId: string) => {
+    if (isSharedView) {
+      return;
+    }
     setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
   };
 
   const handleAddEvent = () => {
+    if (isSharedView) {
+      return;
+    }
     const newEvent: SwimEvent = {
       id: crypto.randomUUID(),
       eventNumber: '',
@@ -364,6 +485,9 @@ const App: React.FC = () => {
   };
 
   const handleImportCSV = (file: File) => {
+    if (isSharedView) {
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
@@ -386,6 +510,63 @@ const App: React.FC = () => {
       setEvents(importedEvents);
     };
     reader.readAsText(file);
+  };
+
+  const handlePublish = async () => {
+    if (!meetInfo) {
+      setError('Cannot publish without meet information.');
+      return;
+    }
+    if (events.length === 0) {
+      setError('Cannot publish because there are no events to share.');
+      return;
+    }
+    try {
+      const shareableEvents: ShareableEvent[] = events.map(({ id, ...rest }) => rest);
+      const payload: SharePayload = {
+        version: SHARE_VERSION,
+        meetInfo,
+        events: shareableEvents,
+        generatedAt: new Date().toISOString(),
+      };
+      const token = encodeSharePayload(payload);
+      if (!token) {
+        throw new Error('Unable to encode share payload.');
+      }
+      if (typeof window === 'undefined') {
+        throw new Error('Publishing is only available in the browser.');
+      }
+      const encodedToken = encodeURIComponent(token);
+      const baseUrl = `${window.location.origin}${window.location.pathname}`;
+      const shareUrl = `${baseUrl}?shared=${encodedToken}`;
+      const newLink: PublishedLink = {
+        id: crypto.randomUUID(),
+        meetName: meetInfo.meetName || 'Untitled Meet',
+        createdAt: new Date().toISOString(),
+        url: shareUrl,
+        eventsCount: events.length,
+      };
+      setPublishedLinks(prev => [newLink, ...prev]);
+      let copied = false;
+      if (navigator?.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(shareUrl);
+          copied = true;
+        } catch (copyErr) {
+          console.warn('Failed to copy share URL:', copyErr);
+        }
+      }
+      setPublishResult({ url: shareUrl, copied });
+      setError(null);
+    } catch (err) {
+      console.error('Failed to publish meet:', err);
+      setPublishResult(null);
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred while publishing.');
+    }
+  };
+
+  const handleRemovePublishedLink = (id: string) => {
+    setPublishedLinks(prev => prev.filter(link => link.id !== id));
   };
 
 
@@ -418,6 +599,15 @@ const App: React.FC = () => {
     setError(null);
     setIsLoading(false);
     setFilters({ day: 'all', ageGroup: 'all', stroke: 'all', distance: 'all', gender: 'all' });
+    setPublishResult(null);
+    setShareMetadata(null);
+    setSharedError(null);
+    if (isSharedView && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('shared');
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+    setIsSharedView(false);
   };
 
 
@@ -430,7 +620,53 @@ const App: React.FC = () => {
         </header>
 
         <main className="bg-white p-6 rounded-2xl shadow-lg w-full">
-          {isLoading ? (
+          {!isSharedView && publishedLinks.length > 0 && (
+            <PublishedLinks links={publishedLinks} onRemove={handleRemovePublishedLink} />
+          )}
+
+          {publishResult && !isSharedView && (
+            <div className="mb-6 p-4 rounded-lg border border-brand-teal bg-brand-teal/10 text-brand-dark">
+              <p className="font-semibold">Share link created!</p>
+              <p className="text-sm break-all">{publishResult.url}</p>
+              <p className="text-xs text-gray-600 mt-2">
+                {publishResult.copied ? 'Link copied to your clipboard.' : 'Copy the link above to share with your athletes.'}
+              </p>
+            </div>
+          )}
+
+          {isSharedView ? (
+            sharedError ? (
+              <div className="text-center p-6 bg-red-50 rounded-lg">
+                <p className="text-red-600 font-semibold">{sharedError}</p>
+                <button onClick={resetApp} className="mt-4 px-6 py-2 bg-brand-blue text-white rounded-lg hover:bg-brand-blue/90 transition-colors">
+                  Open full editor
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div className="mb-6 flex flex-wrap items-start justify-between gap-4 p-4 bg-brand-blue/10 border border-brand-blue/20 rounded-xl">
+                  <div>
+                    <p className="text-brand-dark font-semibold">Read-only shared view</p>
+                    {shareMetadata?.generatedAt && (
+                      <p className="text-sm text-brand-dark/70">Published on {new Date(shareMetadata.generatedAt).toLocaleString()}</p>
+                    )}
+                  </div>
+                  <button onClick={resetApp} className="px-4 py-2 bg-brand-blue text-white rounded-lg hover:bg-brand-blue/90 transition-colors">
+                    Open full editor
+                  </button>
+                </div>
+                {meetInfo && <MeetInfoDisplay info={meetInfo} />}
+                <h2 className="text-2xl font-bold text-brand-dark mt-8 mb-4">Events</h2>
+                <EventFilters filters={filters} setFilters={setFilters} options={filterOptions} />
+                <EventTable 
+                  events={filteredEvents} 
+                  onUpdateEvent={handleUpdateEvent}
+                  onDeleteEvent={handleDeleteEvent}
+                  readOnly
+                />
+              </div>
+            )
+          ) : isLoading ? (
             <div className="flex flex-col items-center justify-center h-64">
               <Spinner />
               <p className="mt-4 text-lg text-brand-cyan font-semibold animate-pulse">{loadingMessage}</p>
@@ -445,14 +681,20 @@ const App: React.FC = () => {
           ) : (events.length > 0 || meetInfo) ? (
             <div>
               <div className="flex justify-end items-center mb-4">
-                 <button onClick={resetApp} className="px-4 py-2 bg-brand-orange text-white rounded-lg hover:bg-opacity-90 transition-colors">
+                <button onClick={resetApp} className="px-4 py-2 bg-brand-orange text-white rounded-lg hover:bg-opacity-90 transition-colors">
                   Start Over
                 </button>
               </div>
               {meetInfo && <MeetInfoDisplay info={meetInfo} />}
               <h2 className="text-2xl font-bold text-brand-dark mt-8 mb-4">Events</h2>
               <EventFilters filters={filters} setFilters={setFilters} options={filterOptions} />
-              <DataActions onExport={handleExportCSV} onImport={handleImportCSV} onAddEvent={handleAddEvent} />
+              <DataActions
+                onExport={handleExportCSV}
+                onImport={handleImportCSV}
+                onAddEvent={handleAddEvent}
+                onPublish={handlePublish}
+                canPublish={Boolean(meetInfo && events.length > 0)}
+              />
               <EventTable 
                 events={filteredEvents} 
                 onUpdateEvent={handleUpdateEvent}
@@ -478,19 +720,21 @@ const App: React.FC = () => {
           )}
         </main>
         
-        <ConfigPanel 
-          apiKey={apiKey}
-          setApiKey={setApiKey}
-          model={model}
-          setModel={setModel}
-          googleSheetUrl={googleSheetUrl}
-          setGoogleSheetUrl={setGoogleSheetUrl}
-          pdfProxyUrl={pdfProxyUrl}
-          setPdfProxyUrl={setPdfProxyUrl}
-          pdfProxyApiKey={pdfProxyApiKey}
-          setPdfProxyApiKey={setPdfProxyApiKey}
-          defaultPdfProxyUrl={DEFAULT_PDF_PROXY_URL}
-        />
+        {!isSharedView && (
+          <ConfigPanel 
+            apiKey={apiKey}
+            setApiKey={setApiKey}
+            model={model}
+            setModel={setModel}
+            googleSheetUrl={googleSheetUrl}
+            setGoogleSheetUrl={setGoogleSheetUrl}
+            pdfProxyUrl={pdfProxyUrl}
+            setPdfProxyUrl={setPdfProxyUrl}
+            pdfProxyApiKey={pdfProxyApiKey}
+            setPdfProxyApiKey={setPdfProxyApiKey}
+            defaultPdfProxyUrl={DEFAULT_PDF_PROXY_URL}
+          />
+        )}
 
          <footer className="text-center mt-8 text-gray-500 text-sm">
           <p>Powered by the Gemini API</p>

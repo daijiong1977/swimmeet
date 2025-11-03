@@ -41,6 +41,23 @@ export interface SwimEvent extends RawSwimEvent {
   gender: 'Girls' | 'Boys' | 'Mixed';
 }
 
+export interface ShareableEvent extends Omit<SwimEvent, 'id'> {}
+
+export interface SharePayload {
+  version: number;
+  meetInfo: MeetInfo;
+  events: ShareableEvent[];
+  generatedAt: string;
+}
+
+export interface PublishedLink {
+  id: string;
+  meetName: string;
+  createdAt: string;
+  url: string;
+  eventsCount: number;
+}
+
 export interface FilterOptions {
   day: string;
   ageGroup: string;
