@@ -32,12 +32,12 @@ if (!localGeminiKey || !localGithubToken) {
 ## Endpoints Used
 
 ### Gemini API Key
-- **URL**: `https://emailapi.6ray.com/gemini_api`
+- **URL**: `https://emailapi.6ray.com/ai/apikey`
 - **Response**: `{ success: true, apiKey: "AIza..." }`
 - **Used when**: localStorage has no `GEMINI_API_KEY`
 
 ### GitHub Config
-- **URL**: `https://emailapi.6ray.com/github_api`
+- **URL**: `https://emailapi.6ray.com/github/token`
 - **Response**: 
   ```json
   {
@@ -91,7 +91,10 @@ useEffect(() => {
   
   // Only fetch from proxy if localStorage is empty
   if (needsGeminiKey || needsGithubConfig) {
-    const [geminiRes, githubRes] = await Promise.all([...]);
+    const [geminiRes, githubRes] = await Promise.all([
+      fetch('https://emailapi.6ray.com/ai/apikey'),
+      fetch('https://emailapi.6ray.com/github/token')
+    ]);
     // Set state if proxy returns valid config
   }
 }, []); // Run once on mount
