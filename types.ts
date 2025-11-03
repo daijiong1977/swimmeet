@@ -58,13 +58,17 @@ export interface SharePayload {
   events?: ShareableEvent[];
   generatedAt: string;
   storage?: ShareStorageMetadata;
+  status?: MeetStatus;
 }
 
 export interface StoredShareData {
   version: number;
   generatedAt: string;
+  updatedAt?: string;
   meetInfo: MeetInfo;
   events: ShareableEvent[];
+  status?: MeetStatus;
+  shareToken?: string;
 }
 
 export interface ShareStoragePreferences {
@@ -89,6 +93,20 @@ export type ShareStorageTestStatus = 'idle' | 'running' | 'success' | 'error';
 export interface ShareStorageTestState {
   status: ShareStorageTestStatus;
   message: string | null;
+}
+
+export type MeetStatus = 'draft' | 'published';
+
+export interface MeetMetadata {
+  id: string;
+  meetName: string;
+  status: MeetStatus;
+  createdAt: string;
+  updatedAt: string;
+  eventsCount: number;
+  storage: ShareStorageMetadata;
+  sha: string;
+  shareToken?: string;
 }
 
 export interface FilterOptions {
