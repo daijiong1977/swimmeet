@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
-import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent, ShareStoragePreferences, ShareStorageMetadata, StoredShareData } from './types';
+import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent, ShareStoragePreferences, ShareStorageMetadata, StoredShareData, ShareStorageTestState } from './types';
 import { extractMeetDataFromImages } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import EventTable from './components/EventTable';
@@ -92,6 +92,11 @@ const sanitizeFolder = (folder: string): string => {
     return '';
   }
   return trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
+};
+
+const buildStorageFilePath = (metadata: ShareStorageMetadata): string => {
+  const folder = sanitizeFolder(metadata.path);
+  return `${folder ? `${folder}/` : ''}${metadata.id}.json`;
 };
 
 
@@ -285,6 +290,11 @@ const App: React.FC = () => {
     }
   });
 
+  const [shareStorageTestState, setShareStorageTestState] = useState<ShareStorageTestState>({
+    status: 'idle',
+    message: null,
+  });
+
   const [filters, setFilters] = useState<FilterOptions>({
     day: 'all',
     ageGroup: 'all',
@@ -363,6 +373,18 @@ const App: React.FC = () => {
       console.warn('Failed to persist share storage preferences:', err);
     }
   }, [shareStoragePreferences]);
+
+  useEffect(() => {
+    setShareStorageTestState((prev) => (prev.status === 'idle' && prev.message === null)
+      ? prev
+      : { status: 'idle', message: null });
+  }, [
+    shareStoragePreferences.githubOwner,
+    shareStoragePreferences.githubRepo,
+    shareStoragePreferences.githubBranch,
+    shareStoragePreferences.githubFolder,
+    shareStoragePreferences.githubToken,
+  ]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -650,12 +672,13 @@ const App: React.FC = () => {
       let storageMetadata: ShareStorageMetadata | undefined;
 
       if (shouldAttemptRemote) {
-        storageMetadata = await uploadShareToGitHub({
+        const uploaded = await uploadShareToGitHub({
           version: SHARE_VERSION,
           generatedAt,
           meetInfo,
           events: shareableEvents,
         }, shareStoragePreferences);
+        storageMetadata = uploaded.metadata;
       }
 
       const payload: SharePayload = storageMetadata
@@ -712,10 +735,87 @@ const App: React.FC = () => {
     setPublishedLinks(prev => prev.filter(link => link.id !== id));
   };
 
+  const handleTestShareStorage = async () => {
+    if (!shareStoragePreferences.githubOwner || !shareStoragePreferences.githubRepo || !shareStoragePreferences.githubToken) {
+      setShareStorageTestState({
+        status: 'error',
+        message: 'Provide the repository owner, name, and a token before testing.',
+      });
+      return;
+    }
+
+    setShareStorageTestState({
+      status: 'running',
+      message: 'Attempting to write and remove a test share file…',
+    });
+
+    const sampleData: StoredShareData = {
+      version: SHARE_VERSION,
+      generatedAt: new Date().toISOString(),
+      meetInfo: {
+        meetName: 'Storage Connectivity Test',
+        dates: 'N/A',
+        location: 'N/A',
+        entryLimits: 'N/A',
+        awards: 'N/A',
+        sessionDetails: [],
+      },
+      events: [
+        {
+          eventNumber: 'T1',
+          ageGroup: 'Test',
+          distance: 25,
+          stroke: 'Freestyle',
+          day: 'Test Day',
+          originalDescription: 'Connectivity validation event',
+          gender: 'Mixed',
+        },
+      ],
+    };
+
+    let uploadResult: UploadedShareInfo | null = null;
+    try {
+      uploadResult = await uploadShareToGitHub(sampleData, shareStoragePreferences);
+      await deleteShareFromGitHub(
+        uploadResult.metadata,
+        uploadResult.sha,
+        shareStoragePreferences,
+        `Remove storage connectivity test ${uploadResult.metadata.id}`,
+      );
+      const filePath = buildStorageFilePath(uploadResult.metadata);
+      setShareStorageTestState({
+        status: 'success',
+        message: `Success! Wrote and removed ${filePath} on branch ${uploadResult.metadata.branch}.`,
+      });
+    } catch (err) {
+      if (uploadResult) {
+        try {
+          await deleteShareFromGitHub(
+            uploadResult.metadata,
+            uploadResult.sha,
+            shareStoragePreferences,
+            `Cleanup after failed storage test ${uploadResult.metadata.id}`,
+          );
+        } catch (cleanupErr) {
+          console.warn('Failed to clean up test share file:', cleanupErr);
+        }
+      }
+      setShareStorageTestState({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Storage test failed due to an unexpected error.',
+      });
+    }
+  };
+
+  type UploadedShareInfo = {
+    metadata: ShareStorageMetadata;
+    sha: string;
+  };
+
   const uploadShareToGitHub = async (
     data: StoredShareData,
     prefs: ShareStoragePreferences,
-  ): Promise<ShareStorageMetadata> => {
+  ): Promise<UploadedShareInfo> => {
     if (!prefs.githubOwner || !prefs.githubRepo || !prefs.githubToken) {
       throw new Error('GitHub storage is not fully configured.');
     }
@@ -740,20 +840,64 @@ const App: React.FC = () => {
       }),
     });
 
+    const responseBody = await response.json().catch(() => ({}));
+
     if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      console.error('GitHub upload failed:', response.status, details);
+      console.error('GitHub upload failed:', response.status, responseBody);
       throw new Error('Failed to upload shared meet to GitHub. Check token permissions and branch access.');
     }
 
+    const sha = responseBody?.content?.sha;
+    if (!sha || typeof sha !== 'string') {
+      throw new Error('GitHub upload succeeded but the file SHA was missing from the response.');
+    }
+
     return {
-      type: 'github',
-      owner: prefs.githubOwner,
-      repo: prefs.githubRepo,
-      branch: prefs.githubBranch || DEFAULT_SHARE_STORAGE_PREFS.githubBranch,
-      path: folder,
-      id,
+      metadata: {
+        type: 'github',
+        owner: prefs.githubOwner,
+        repo: prefs.githubRepo,
+        branch: prefs.githubBranch || DEFAULT_SHARE_STORAGE_PREFS.githubBranch,
+        path: folder,
+        id,
+      },
+      sha,
     };
+  };
+
+  const deleteShareFromGitHub = async (
+    metadata: ShareStorageMetadata,
+    sha: string,
+    prefs: ShareStoragePreferences,
+    commitMessage?: string,
+  ): Promise<void> => {
+    if (!prefs.githubOwner || !prefs.githubRepo || !prefs.githubToken) {
+      throw new Error('GitHub storage is not fully configured.');
+    }
+
+    const filePath = buildStorageFilePath(metadata);
+    const deleteUrl = `https://api.github.com/repos/${prefs.githubOwner}/${prefs.githubRepo}/contents/${filePath}`;
+
+    const response = await fetch(deleteUrl, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `token ${prefs.githubToken.trim()}`,
+      },
+      body: JSON.stringify({
+        message: commitMessage || `Remove shared meet ${metadata.id}`,
+        sha,
+        branch: metadata.branch,
+      }),
+    });
+
+    const responseBody = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      console.error('GitHub delete failed:', response.status, responseBody);
+      throw new Error('Failed to delete shared meet from GitHub. Check token permissions and branch access.');
+    }
   };
 
 
@@ -922,6 +1066,8 @@ const App: React.FC = () => {
             defaultPdfProxyUrl={DEFAULT_PDF_PROXY_URL}
             shareStoragePreferences={shareStoragePreferences}
             setShareStoragePreferences={setShareStoragePreferences}
+            onTestShareStorage={handleTestShareStorage}
+            shareStorageTestState={shareStorageTestState}
           />
         )}
 

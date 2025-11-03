@@ -84,6 +84,13 @@ export interface PublishedLink {
   storage?: ShareStorageMetadata;
 }
 
+export type ShareStorageTestStatus = 'idle' | 'running' | 'success' | 'error';
+
+export interface ShareStorageTestState {
+  status: ShareStorageTestStatus;
+  message: string | null;
+}
+
 export interface FilterOptions {
   day: string;
   ageGroup: string;

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { GeminiModel, ShareStoragePreferences } from '../types';
+import { GeminiModel, ShareStoragePreferences, ShareStorageTestState } from '../types';
 
 interface ConfigPanelProps {
   apiKey: string;
@@ -16,6 +16,8 @@ interface ConfigPanelProps {
   defaultPdfProxyUrl: string;
   shareStoragePreferences: ShareStoragePreferences;
   setShareStoragePreferences: (prefs: ShareStoragePreferences) => void;
+  onTestShareStorage: () => void;
+  shareStorageTestState: ShareStorageTestState;
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({
@@ -31,7 +33,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   setPdfProxyApiKey,
   defaultPdfProxyUrl,
   shareStoragePreferences,
-  setShareStoragePreferences
+  setShareStoragePreferences,
+  onTestShareStorage,
+  shareStorageTestState
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -255,6 +259,23 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                   <p><strong>Sensitive:</strong> Stored locally in this browser. Use a limited-scope token and clear it when finished.</p>
                 </div>
               </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={onTestShareStorage}
+                disabled={shareStorageTestState.status === 'running'}
+                className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors ${shareStorageTestState.status === 'running' ? 'bg-gray-300 text-gray-500 cursor-wait' : 'bg-brand-blue text-white hover:bg-brand-blue/90'}`}
+              >
+                {shareStorageTestState.status === 'running' ? 'Testing…' : 'Test GitHub storage'}
+              </button>
+              {shareStorageTestState.message && (
+                <p
+                  className={`text-xs ${shareStorageTestState.status === 'success' ? 'text-green-600' : shareStorageTestState.status === 'error' ? 'text-red-600' : 'text-gray-600'}`}
+                >
+                  {shareStorageTestState.message}
+                </p>
+              )}
             </div>
           </div>
         </div>
