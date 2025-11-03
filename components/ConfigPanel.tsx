@@ -9,6 +9,11 @@ interface ConfigPanelProps {
   setModel: (model: GeminiModel) => void;
   googleSheetUrl: string;
   setGoogleSheetUrl: (url: string) => void;
+  pdfProxyUrl: string;
+  setPdfProxyUrl: (url: string) => void;
+  pdfProxyApiKey: string;
+  setPdfProxyApiKey: (key: string) => void;
+  defaultPdfProxyUrl: string;
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({
@@ -17,7 +22,12 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   model,
   setModel,
   googleSheetUrl,
-  setGoogleSheetUrl
+  setGoogleSheetUrl,
+  pdfProxyUrl,
+  setPdfProxyUrl,
+  pdfProxyApiKey,
+  setPdfProxyApiKey,
+  defaultPdfProxyUrl
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -71,6 +81,47 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash (Faster)</option>
                 <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Accurate)</option>
               </select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label htmlFor="pdfProxyUrl" className="block text-sm font-medium text-gray-700">
+                  PDF Fetch Proxy URL
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setPdfProxyUrl(defaultPdfProxyUrl)}
+                  className="text-xs text-brand-cyan hover:underline"
+                >
+                  Use default
+                </button>
+              </div>
+              <input
+                type="text"
+                id="pdfProxyUrl"
+                value={pdfProxyUrl}
+                onChange={(e) => setPdfProxyUrl(e.target.value)}
+                placeholder="https://api.allorigins.win/raw?url={{url}}"
+                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Use <code className="bg-gray-200 px-1 rounded">{'{{url}}'}</code> as a placeholder for the PDF link. Proxies such as <code className="bg-gray-200 px-1 rounded">https://proxy.cors.sh/{'{{url}}'}</code> require an API key.
+              </p>
+            </div>
+            <div>
+              <label htmlFor="pdfProxyApiKey" className="block text-sm font-medium text-gray-700">
+                Proxy API Key (optional)
+              </label>
+              <input
+                type="password"
+                id="pdfProxyApiKey"
+                value={pdfProxyApiKey}
+                onChange={(e) => setPdfProxyApiKey(e.target.value)}
+                placeholder="Only needed for proxies that require it"
+                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                When set, the value is sent as an <code className="bg-gray-200 px-1 rounded">x-cors-api-key</code> header.
+              </p>
             </div>
           </div>
           

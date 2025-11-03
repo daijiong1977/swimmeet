@@ -11,6 +11,8 @@ import DataActions from './components/DataActions';
 import ConfigPanel from './components/ConfigPanel';
 import SheetEmbed from './components/SheetEmbed';
 
+const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
+
 
 // Declaration for pdf.js library loaded from CDN
 declare const pdfjsLib: any;
@@ -46,17 +48,100 @@ const convertPdfToImageFiles = async (pdfFile: File): Promise<File[]> => {
   return images;
 };
 
-const fetchPdfFromUrl = async (url: string): Promise<File> => {
-  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  const response = await fetch(proxyUrl);
-  if (!response.ok) {
-    throw new Error(`Network response was not ok: ${response.statusText}`);
+interface PdfProxyConfig {
+  proxyUrl?: string;
+  proxyApiKey?: string;
+}
+
+const buildProxiedUrl = (template: string, targetUrl: string): string => {
+  if (!template) {
+    return targetUrl;
   }
-  const blob = await response.blob();
-  if (blob.type !== 'application/pdf') {
-      throw new Error('The downloaded file is not a PDF.');
+
+  if (template.includes('{{url}}')) {
+    return template.replace('{{url}}', encodeURIComponent(targetUrl));
   }
-  return new File([blob], "downloaded_meet_announcement.pdf", { type: "application/pdf" });
+
+  if (template.endsWith('=')) {
+    return `${template}${encodeURIComponent(targetUrl)}`;
+  }
+
+  if (template.endsWith('/')) {
+    return `${template}${targetUrl}`;
+  }
+
+  if (template.includes('?')) {
+    const hasUrlParam = /[?&]url=/i.test(template);
+    if (hasUrlParam) {
+      return `${template}${encodeURIComponent(targetUrl)}`;
+    }
+    const suffix = template.endsWith('?') || template.endsWith('&') ? '' : '&';
+    return `${template}${suffix}url=${encodeURIComponent(targetUrl)}`;
+  }
+
+  return `${template}${encodeURIComponent(targetUrl)}`;
+};
+
+const fetchPdfFromUrl = async (url: string, config: PdfProxyConfig = {}): Promise<File> => {
+  const { proxyUrl, proxyApiKey } = config;
+  const seenTemplates = new Set<string>();
+  const proxyCandidates = [] as Array<{ template: string; name: string }>;
+
+  const addCandidate = (template: string, name: string) => {
+    const trimmed = template.trim();
+    if (!trimmed || seenTemplates.has(trimmed)) {
+      return;
+    }
+    seenTemplates.add(trimmed);
+    proxyCandidates.push({ template: trimmed, name });
+  };
+
+  if (proxyUrl) {
+    addCandidate(proxyUrl, 'Custom proxy');
+  }
+
+  addCandidate(DEFAULT_PDF_PROXY_URL, 'AllOrigins');
+
+  if (proxyApiKey && proxyApiKey.trim()) {
+    addCandidate('https://proxy.cors.sh/{{url}}', 'proxy.cors.sh');
+  }
+
+  const errors: string[] = [];
+
+  for (const candidate of proxyCandidates) {
+    const proxiedUrl = buildProxiedUrl(candidate.template, url);
+    try {
+      const response = await fetch(proxiedUrl, {
+        headers: proxyApiKey ? { 'x-cors-api-key': proxyApiKey } : undefined,
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-cache',
+      });
+
+      if (!response.ok) {
+        errors.push(`${candidate.name}: ${response.status} ${response.statusText}`);
+        continue;
+      }
+
+      const blob = await response.blob();
+
+      if (blob.size === 0) {
+        errors.push(`${candidate.name}: received empty response`);
+        continue;
+      }
+
+      const contentType = response.headers.get('content-type') || blob.type;
+      const pdfBlob = contentType && contentType.includes('pdf')
+        ? blob
+        : new Blob([blob], { type: 'application/pdf' });
+
+      return new File([pdfBlob], 'downloaded_meet_announcement.pdf', { type: 'application/pdf' });
+    } catch (error) {
+      errors.push(`${candidate.name}: ${(error as Error).message}`);
+    }
+  }
+
+  throw new Error(`Unable to download PDF via configured proxies. ${errors.join(' | ')}`);
 };
 
 
@@ -81,6 +166,20 @@ const App: React.FC = () => {
     gender: 'all',
   });
 
+  const [pdfProxyUrl, setPdfProxyUrl] = useState<string>(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_PDF_PROXY_URL;
+    }
+    return localStorage.getItem('PDF_PROXY_URL') || DEFAULT_PDF_PROXY_URL;
+  });
+
+  const [pdfProxyApiKey, setPdfProxyApiKey] = useState<string>(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return localStorage.getItem('PDF_PROXY_API_KEY') || '';
+  });
+
   useEffect(() => {
     if (apiKey) {
       sessionStorage.setItem('GEMINI_API_KEY', apiKey);
@@ -88,6 +187,28 @@ const App: React.FC = () => {
       sessionStorage.removeItem('GEMINI_API_KEY');
     }
   }, [apiKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (pdfProxyUrl && pdfProxyUrl.trim() && pdfProxyUrl !== DEFAULT_PDF_PROXY_URL) {
+      localStorage.setItem('PDF_PROXY_URL', pdfProxyUrl.trim());
+    } else {
+      localStorage.removeItem('PDF_PROXY_URL');
+    }
+  }, [pdfProxyUrl]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (pdfProxyApiKey && pdfProxyApiKey.trim()) {
+      localStorage.setItem('PDF_PROXY_API_KEY', pdfProxyApiKey.trim());
+    } else {
+      localStorage.removeItem('PDF_PROXY_API_KEY');
+    }
+  }, [pdfProxyApiKey]);
 
 
   const handleFileChange = (selectedFiles: FileList | null) => {
@@ -150,7 +271,10 @@ const App: React.FC = () => {
     try {
       if (pdfUrl.trim()) {
         setLoadingMessage('Downloading PDF from URL...');
-        pdfFile = await fetchPdfFromUrl(pdfUrl.trim());
+        pdfFile = await fetchPdfFromUrl(pdfUrl.trim(), {
+          proxyUrl: pdfProxyUrl,
+          proxyApiKey: pdfProxyApiKey,
+        });
       } else if (files.length > 0) {
         pdfFile = files[0];
         if (pdfFile.type !== 'application/pdf') {
@@ -351,6 +475,11 @@ const App: React.FC = () => {
           setModel={setModel}
           googleSheetUrl={googleSheetUrl}
           setGoogleSheetUrl={setGoogleSheetUrl}
+          pdfProxyUrl={pdfProxyUrl}
+          setPdfProxyUrl={setPdfProxyUrl}
+          pdfProxyApiKey={pdfProxyApiKey}
+          setPdfProxyApiKey={setPdfProxyApiKey}
+          defaultPdfProxyUrl={DEFAULT_PDF_PROXY_URL}
         />
 
          <footer className="text-center mt-8 text-gray-500 text-sm">
