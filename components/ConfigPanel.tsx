@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { GeminiModel } from '../types';
+import { GeminiModel, ShareStoragePreferences } from '../types';
 
 interface ConfigPanelProps {
   apiKey: string;
@@ -14,6 +14,8 @@ interface ConfigPanelProps {
   pdfProxyApiKey: string;
   setPdfProxyApiKey: (key: string) => void;
   defaultPdfProxyUrl: string;
+  shareStoragePreferences: ShareStoragePreferences;
+  setShareStoragePreferences: (prefs: ShareStoragePreferences) => void;
 }
 
 const ConfigPanel: React.FC<ConfigPanelProps> = ({
@@ -27,7 +29,9 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
   setPdfProxyUrl,
   pdfProxyApiKey,
   setPdfProxyApiKey,
-  defaultPdfProxyUrl
+  defaultPdfProxyUrl,
+  shareStoragePreferences,
+  setShareStoragePreferences
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -164,6 +168,93 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="https://docs.google.com/spreadsheets/d/..."
                 className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
               />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-semibold text-gray-800">Share Link Storage (GitHub)</h3>
+            <p className="text-sm text-gray-600">
+              Large meets generate oversized share links. Provide a GitHub Personal Access Token (classic, repo scope) and storage details to upload share payloads as JSON files in this repository. Links will then stay short for athletes.
+            </p>
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="githubOwner" className="block text-sm font-medium text-gray-700">
+                  Repository owner or org
+                </label>
+                <input
+                  id="githubOwner"
+                  type="text"
+                  value={shareStoragePreferences.githubOwner}
+                  onChange={(e) => setShareStoragePreferences({ ...shareStoragePreferences, githubOwner: e.target.value })}
+                  placeholder="daijiong1977"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+                />
+              </div>
+              <div>
+                <label htmlFor="githubRepo" className="block text-sm font-medium text-gray-700">
+                  Repository name
+                </label>
+                <input
+                  id="githubRepo"
+                  type="text"
+                  value={shareStoragePreferences.githubRepo}
+                  onChange={(e) => setShareStoragePreferences({ ...shareStoragePreferences, githubRepo: e.target.value })}
+                  placeholder="swimmeet"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+                />
+              </div>
+              <div>
+                <label htmlFor="githubBranch" className="block text-sm font-medium text-gray-700">
+                  Branch
+                </label>
+                <input
+                  id="githubBranch"
+                  type="text"
+                  value={shareStoragePreferences.githubBranch}
+                  onChange={(e) => setShareStoragePreferences({ ...shareStoragePreferences, githubBranch: e.target.value })}
+                  placeholder="main"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+                />
+              </div>
+              <div>
+                <label htmlFor="githubFolder" className="block text-sm font-medium text-gray-700">
+                  Folder inside repo
+                </label>
+                <input
+                  id="githubFolder"
+                  type="text"
+                  value={shareStoragePreferences.githubFolder}
+                  onChange={(e) => setShareStoragePreferences({ ...shareStoragePreferences, githubFolder: e.target.value })}
+                  placeholder="public/shares"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+                />
+                <p className="mt-1 text-xs text-gray-500">Use forward slashes. Folders are created automatically.</p>
+              </div>
+              <div>
+                <label htmlFor="githubToken" className="block text-sm font-medium text-gray-700">
+                  GitHub Personal Access Token
+                </label>
+                <input
+                  id="githubToken"
+                  type="password"
+                  value={shareStoragePreferences.githubToken}
+                  onChange={(e) => setShareStoragePreferences({ ...shareStoragePreferences, githubToken: e.target.value })}
+                  placeholder="ghp_example123"
+                  className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShareStoragePreferences({ githubOwner: '', githubRepo: '', githubBranch: 'main', githubFolder: 'public/shares', githubToken: '' })}
+                    className="px-3 py-1 text-xs font-semibold text-brand-cyan border border-brand-cyan rounded-md hover:bg-brand-cyan hover:text-white transition-colors"
+                  >
+                    Clear storage settings
+                  </button>
+                </div>
+                <div className="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700 text-xs">
+                  <p><strong>Sensitive:</strong> Stored locally in this browser. Use a limited-scope token and clear it when finished.</p>
+                </div>
+              </div>
             </div>
           </div>
         </div>

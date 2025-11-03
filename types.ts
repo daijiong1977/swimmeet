@@ -43,11 +43,36 @@ export interface SwimEvent extends RawSwimEvent {
 
 export interface ShareableEvent extends Omit<SwimEvent, 'id'> {}
 
+export interface ShareStorageMetadata {
+  type: 'github';
+  owner: string;
+  repo: string;
+  branch: string;
+  path: string;
+  id: string;
+}
+
 export interface SharePayload {
   version: number;
+  meetInfo?: MeetInfo;
+  events?: ShareableEvent[];
+  generatedAt: string;
+  storage?: ShareStorageMetadata;
+}
+
+export interface StoredShareData {
+  version: number;
+  generatedAt: string;
   meetInfo: MeetInfo;
   events: ShareableEvent[];
-  generatedAt: string;
+}
+
+export interface ShareStoragePreferences {
+  githubOwner: string;
+  githubRepo: string;
+  githubBranch: string;
+  githubFolder: string;
+  githubToken: string;
 }
 
 export interface PublishedLink {
@@ -56,6 +81,7 @@ export interface PublishedLink {
   createdAt: string;
   url: string;
   eventsCount: number;
+  storage?: ShareStorageMetadata;
 }
 
 export interface FilterOptions {

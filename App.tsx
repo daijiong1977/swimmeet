@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from 'lz-string';
-import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent } from './types';
+import { SwimEvent, FilterOptions, RawSwimEvent, MeetInfo, MeetData, GeminiModel, SharePayload, PublishedLink, ShareableEvent, ShareStoragePreferences, ShareStorageMetadata, StoredShareData } from './types';
 import { extractMeetDataFromImages } from './services/geminiService';
 import FileUpload from './components/FileUpload';
 import EventTable from './components/EventTable';
@@ -16,9 +16,18 @@ import PublishedLinks from './components/PublishedLinks';
 const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
 const SHARE_VERSION = 1;
 const PUBLISHED_LINKS_STORAGE_KEY = 'PUBLISHED_MEETS_V1';
+const SHARE_STORAGE_PREFS_KEY = 'SHARE_STORAGE_PREFS_V1';
+const DEFAULT_SHARE_STORAGE_PREFS: ShareStoragePreferences = {
+  githubOwner: '',
+  githubRepo: '',
+  githubBranch: 'main',
+  githubFolder: 'public/shares',
+  githubToken: '',
+};
 
 const SHARE_TOKEN_PREFIX_LZ = 'lz:';
 const SHARE_TOKEN_PREFIX_B64 = 'b64:';
+const MAX_INLINE_SHARE_TOKEN_CHARS = 1800;
 
 const base64Encode = (input: string): string => {
   if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
@@ -75,6 +84,14 @@ const decodeSharePayload = (token: string): SharePayload => {
 
   const parsed = JSON.parse(json) as SharePayload;
   return parsed;
+};
+
+const sanitizeFolder = (folder: string): string => {
+  const trimmed = folder.trim();
+  if (!trimmed) {
+    return '';
+  }
+  return trimmed.replace(/^\/+/, '').replace(/\/+$/, '');
 };
 
 
@@ -248,6 +265,26 @@ const App: React.FC = () => {
     }
   });
 
+  const [shareStoragePreferences, setShareStoragePreferences] = useState<ShareStoragePreferences>(() => {
+    if (typeof window === 'undefined') {
+      return DEFAULT_SHARE_STORAGE_PREFS;
+    }
+    try {
+      const stored = localStorage.getItem(SHARE_STORAGE_PREFS_KEY);
+      if (!stored) {
+        return DEFAULT_SHARE_STORAGE_PREFS;
+      }
+      const parsed = JSON.parse(stored) as ShareStoragePreferences;
+      return {
+        ...DEFAULT_SHARE_STORAGE_PREFS,
+        ...parsed,
+      };
+    } catch (err) {
+      console.warn('Failed to parse share storage preferences:', err);
+      return DEFAULT_SHARE_STORAGE_PREFS;
+    }
+  });
+
   const [filters, setFilters] = useState<FilterOptions>({
     day: 'all',
     ageGroup: 'all',
@@ -320,36 +357,83 @@ const App: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
+    try {
+      localStorage.setItem(SHARE_STORAGE_PREFS_KEY, JSON.stringify(shareStoragePreferences));
+    } catch (err) {
+      console.warn('Failed to persist share storage preferences:', err);
+    }
+  }, [shareStoragePreferences]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const sharedToken = params.get('shared');
     if (!sharedToken) {
       return;
     }
-    try {
-      const payload = decodeSharePayload(sharedToken);
-      if (payload.version && payload.version > SHARE_VERSION) {
-        throw new Error('Unsupported share link version');
+    let cancelled = false;
+
+    const resolveSharedView = async () => {
+      try {
+        const payload = decodeSharePayload(sharedToken);
+        if (payload.version && payload.version > SHARE_VERSION) {
+          throw new Error('Unsupported share link version');
+        }
+
+        let resolvedMeetInfo = payload.meetInfo ?? null;
+        let resolvedEvents = payload.events ?? null;
+        let resolvedGeneratedAt = payload.generatedAt;
+
+        if (payload.storage?.type === 'github') {
+          const storage = payload.storage;
+          const folder = sanitizeFolder(storage.path);
+          const rawUrl = `https://raw.githubusercontent.com/${storage.owner}/${storage.repo}/${storage.branch}/${folder ? `${folder}/` : ''}${storage.id}.json`;
+          const response = await fetch(rawUrl, { cache: 'no-cache' });
+          if (!response.ok) {
+            throw new Error(`Failed to fetch shared data (${response.status})`);
+          }
+          const remoteData = (await response.json()) as StoredShareData;
+          resolvedMeetInfo = remoteData.meetInfo;
+          resolvedEvents = remoteData.events;
+          resolvedGeneratedAt = remoteData.generatedAt || resolvedGeneratedAt;
+        }
+
+        if (!resolvedMeetInfo || !Array.isArray(resolvedEvents)) {
+          throw new Error('Malformed shared payload');
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        setIsSharedView(true);
+        setShareMetadata({ generatedAt: resolvedGeneratedAt });
+        setSharedError(null);
+        const restoredEvents: SwimEvent[] = resolvedEvents.map((event) => ({
+          ...event,
+          id: crypto.randomUUID(),
+        }));
+        setMeetInfo(resolvedMeetInfo);
+        setEvents(restoredEvents);
+        setFilters({ day: 'all', ageGroup: 'all', stroke: 'all', distance: 'all', gender: 'all' });
+        setFiles([]);
+        setPdfUrl('');
+        setError(null);
+      } catch (err) {
+        console.error('Failed to load shared view:', err);
+        if (!cancelled) {
+          setSharedError('Unable to load this shared meet. The link may be invalid, corrupted, or stored data is unavailable.');
+        }
       }
-      if (!payload || !payload.meetInfo || !Array.isArray(payload.events)) {
-        throw new Error('Malformed shared payload');
-      }
-      setIsSharedView(true);
-      setShareMetadata({ generatedAt: payload.generatedAt });
-      setSharedError(null);
-      const restoredEvents: SwimEvent[] = payload.events.map((event) => ({
-        ...event,
-        id: crypto.randomUUID(),
-      }));
-      setMeetInfo(payload.meetInfo);
-      setEvents(restoredEvents);
-      setFilters({ day: 'all', ageGroup: 'all', stroke: 'all', distance: 'all', gender: 'all' });
-      setFiles([]);
-      setPdfUrl('');
-      setError(null);
-    } catch (err) {
-      console.error('Failed to load shared view:', err);
-      setSharedError('Unable to load this shared meet. The link may be invalid or has been corrupted.');
-    }
+    };
+
+    resolveSharedView();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
 
@@ -552,12 +636,41 @@ const App: React.FC = () => {
     }
     try {
       const shareableEvents: ShareableEvent[] = events.map(({ id, ...rest }) => rest);
-      const payload: SharePayload = {
-        version: SHARE_VERSION,
-        meetInfo,
-        events: shareableEvents,
-        generatedAt: new Date().toISOString(),
-      };
+      const generatedAt = new Date().toISOString();
+      const inlinePayloadSizeEstimate = JSON.stringify({ meetInfo, events: shareableEvents }).length;
+
+      const shouldAttemptRemote = Boolean(
+        shareStoragePreferences.githubOwner &&
+        shareStoragePreferences.githubRepo &&
+        shareStoragePreferences.githubToken &&
+        // prefer remote for large payloads or when explicitly configured
+        (inlinePayloadSizeEstimate > MAX_INLINE_SHARE_TOKEN_CHARS || shareStoragePreferences.githubFolder)
+      );
+
+      let storageMetadata: ShareStorageMetadata | undefined;
+
+      if (shouldAttemptRemote) {
+        storageMetadata = await uploadShareToGitHub({
+          version: SHARE_VERSION,
+          generatedAt,
+          meetInfo,
+          events: shareableEvents,
+        }, shareStoragePreferences);
+      }
+
+      const payload: SharePayload = storageMetadata
+        ? {
+            version: SHARE_VERSION,
+            generatedAt,
+            storage: storageMetadata,
+          }
+        : {
+            version: SHARE_VERSION,
+            generatedAt,
+            meetInfo,
+            events: shareableEvents,
+          };
+
       const token = encodeSharePayload(payload);
       if (!token) {
         throw new Error('Unable to encode share payload.');
@@ -571,9 +684,10 @@ const App: React.FC = () => {
       const newLink: PublishedLink = {
         id: crypto.randomUUID(),
         meetName: meetInfo.meetName || 'Untitled Meet',
-        createdAt: new Date().toISOString(),
+        createdAt: generatedAt,
         url: shareUrl,
         eventsCount: events.length,
+        storage: storageMetadata,
       };
       setPublishedLinks(prev => [newLink, ...prev]);
       let copied = false;
@@ -596,6 +710,50 @@ const App: React.FC = () => {
 
   const handleRemovePublishedLink = (id: string) => {
     setPublishedLinks(prev => prev.filter(link => link.id !== id));
+  };
+
+  const uploadShareToGitHub = async (
+    data: StoredShareData,
+    prefs: ShareStoragePreferences,
+  ): Promise<ShareStorageMetadata> => {
+    if (!prefs.githubOwner || !prefs.githubRepo || !prefs.githubToken) {
+      throw new Error('GitHub storage is not fully configured.');
+    }
+
+    const folder = sanitizeFolder(prefs.githubFolder || DEFAULT_SHARE_STORAGE_PREFS.githubFolder);
+    const id = crypto.randomUUID();
+    const filePath = `${folder ? `${folder}/` : ''}${id}.json`;
+    const uploadUrl = `https://api.github.com/repos/${prefs.githubOwner}/${prefs.githubRepo}/contents/${filePath}`;
+    const contentBase64 = base64Encode(JSON.stringify(data));
+
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `token ${prefs.githubToken.trim()}`,
+      },
+      body: JSON.stringify({
+        message: `Add shared meet ${data.meetInfo.meetName || id}`,
+        content: contentBase64,
+        branch: prefs.githubBranch || DEFAULT_SHARE_STORAGE_PREFS.githubBranch,
+      }),
+    });
+
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      console.error('GitHub upload failed:', response.status, details);
+      throw new Error('Failed to upload shared meet to GitHub. Check token permissions and branch access.');
+    }
+
+    return {
+      type: 'github',
+      owner: prefs.githubOwner,
+      repo: prefs.githubRepo,
+      branch: prefs.githubBranch || DEFAULT_SHARE_STORAGE_PREFS.githubBranch,
+      path: folder,
+      id,
+    };
   };
 
 
@@ -762,6 +920,8 @@ const App: React.FC = () => {
             pdfProxyApiKey={pdfProxyApiKey}
             setPdfProxyApiKey={setPdfProxyApiKey}
             defaultPdfProxyUrl={DEFAULT_PDF_PROXY_URL}
+            shareStoragePreferences={shareStoragePreferences}
+            setShareStoragePreferences={setShareStoragePreferences}
           />
         )}
 
