@@ -94,7 +94,7 @@ const App: React.FC = () => {
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const [publishedLoaded, setPublishedLoaded] = useState(false);
 
-  const [apiKey, setApiKey] = useState<string>(() => {
+  const [apiKeyInternal, setApiKeyInternal] = useState<string>(() => {
     if (typeof window === 'undefined') {
       return '';
     }
@@ -104,6 +104,14 @@ const App: React.FC = () => {
       ''
     );
   });
+
+  // Wrapper to track manual vs proxy configuration
+  const setApiKey = useCallback((key: string) => {
+    isProxyConfigRef.current.apiKey = false; // Mark as manually set
+    setApiKeyInternal(key);
+  }, []);
+
+  const apiKey = apiKeyInternal;
 
   const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash');
 
@@ -132,7 +140,7 @@ const App: React.FC = () => {
     return stored === 'drafts' || stored === 'shared' ? stored : 'generate';
   });
 
-  const [shareStoragePreferences, setShareStoragePreferences] =
+  const [shareStoragePreferencesInternal, setShareStoragePreferencesInternal] =
     useState<ShareStoragePreferences>(() => {
       if (typeof window === 'undefined') {
         return {
@@ -174,6 +182,14 @@ const App: React.FC = () => {
       }
     });
 
+  // Wrapper to track manual vs proxy configuration
+  const setShareStoragePreferences = useCallback((prefs: ShareStoragePreferences) => {
+    isProxyConfigRef.current.githubConfig = false; // Mark as manually set
+    setShareStoragePreferencesInternal(prefs);
+  }, []);
+
+  const shareStoragePreferences = shareStoragePreferencesInternal;
+
   const [shareStorageTestState, setShareStorageTestState] =
     useState<ShareStorageTestState>({ status: 'idle', message: null });
 
@@ -206,6 +222,12 @@ const App: React.FC = () => {
     url: string;
     copied: boolean;
   } | null>(null);
+
+  // Track if current config came from proxy (memory-only) vs manual (persist to localStorage)
+  const isProxyConfigRef = useRef({
+    apiKey: false,
+    githubConfig: false,
+  });
 
   // Initialize configs from proxy if not in localStorage
   useEffect(() => {
@@ -240,7 +262,8 @@ const App: React.FC = () => {
           if (needsGeminiKey && geminiRes) {
             const geminiData = await geminiRes.json();
             if (geminiData.success && geminiData.apiKey) {
-              setApiKey(geminiData.apiKey);
+              isProxyConfigRef.current.apiKey = true; // Mark as proxy-sourced
+              setApiKeyInternal(geminiData.apiKey); // Use internal setter to avoid marking as manual
               // Store in sessionStorage only (not localStorage) to keep it temporary
               sessionStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, geminiData.apiKey);
             }
@@ -250,7 +273,8 @@ const App: React.FC = () => {
           if (needsGithubConfig && githubRes) {
             const githubData = await githubRes.json();
             if (githubData.success && githubData.token) {
-              setShareStoragePreferences({
+              isProxyConfigRef.current.githubConfig = true; // Mark as proxy-sourced
+              setShareStoragePreferencesInternal({ // Use internal setter to avoid marking as manual
                 githubOwner: githubData.config.owner || '',
                 githubRepo: githubData.config.repo || '',
                 githubBranch: githubData.config.branch || 'main',
@@ -273,10 +297,14 @@ const App: React.FC = () => {
     }
     if (apiKey) {
       sessionStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
-      localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+      // Only save to localStorage if it was manually configured (not from proxy)
+      if (!isProxyConfigRef.current.apiKey) {
+        localStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, apiKey);
+      }
     } else {
       sessionStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
       localStorage.removeItem(GEMINI_API_KEY_STORAGE_KEY);
+      isProxyConfigRef.current.apiKey = false;
     }
   }, [apiKey]);
 
@@ -317,10 +345,13 @@ const App: React.FC = () => {
     if (typeof window === 'undefined') {
       return;
     }
-    localStorage.setItem(
-      SHARE_STORAGE_PREFS_KEY,
-      JSON.stringify(shareStoragePreferences),
-    );
+    // Only save to localStorage if it was manually configured (not from proxy)
+    if (!isProxyConfigRef.current.githubConfig) {
+      localStorage.setItem(
+        SHARE_STORAGE_PREFS_KEY,
+        JSON.stringify(shareStoragePreferences),
+      );
+    }
   }, [shareStoragePreferences]);
 
   useEffect(() => {
