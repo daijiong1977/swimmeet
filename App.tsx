@@ -154,7 +154,12 @@ const App: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState<string>('Processing...');
   const [error, setError] = useState<string | null>(null);
   
-  const [apiKey, setApiKey] = useState<string>(() => sessionStorage.getItem('GEMINI_API_KEY') || '');
+  const [apiKey, setApiKey] = useState<string>(() => {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    return localStorage.getItem('GEMINI_API_KEY') || sessionStorage.getItem('GEMINI_API_KEY') || '';
+  });
   const [model, setModel] = useState<GeminiModel>('gemini-2.5-flash');
   const [googleSheetUrl, setGoogleSheetUrl] = useState<string>('');
 
@@ -181,10 +186,15 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
     if (apiKey) {
       sessionStorage.setItem('GEMINI_API_KEY', apiKey);
+      localStorage.setItem('GEMINI_API_KEY', apiKey);
     } else {
       sessionStorage.removeItem('GEMINI_API_KEY');
+      localStorage.removeItem('GEMINI_API_KEY');
     }
   }, [apiKey]);
 

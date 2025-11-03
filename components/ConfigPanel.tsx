@@ -64,8 +64,23 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 placeholder="Enter your API Key here"
                 className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
               />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      localStorage.removeItem('GEMINI_API_KEY');
+                      sessionStorage.removeItem('GEMINI_API_KEY');
+                      setApiKey('');
+                    }
+                  }}
+                  className="px-3 py-1 text-xs font-semibold text-brand-cyan border border-brand-cyan rounded-md hover:bg-brand-cyan hover:text-white transition-colors"
+                >
+                  Reset stored key
+                </button>
+              </div>
               <div className="mt-2 p-3 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700 text-xs">
-                <p><strong>Security Warning:</strong> Your API key is stored only in your browser's session and is deleted when you close this tab. Do not share this key or use it on a public computer.</p>
+                <p><strong>Security Warning:</strong> Your API key is stored locally in this browser. Use the reset button after you're done, especially on shared machines.</p>
               </div>
             </div>
             <div>
