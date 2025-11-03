@@ -285,12 +285,32 @@ const App: React.FC = () => {
     (async () => {
       try {
         const decodedToken = decodeURIComponent(sharedToken);
-        const payload = decodeSharePayload(decodedToken);
-        const events = payload.events ? toSwimEvents(payload.events) : [];
-        setSharedViewInfo(payload.meetInfo ?? null);
-        setSharedViewEvents(events);
-        setSharedGeneratedAt(payload.generatedAt ?? null);
-        setSharedViewError(null);
+        
+        // Check if it's a UUID (new format) or compressed data (old format)
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        
+        if (uuidPattern.test(decodedToken)) {
+          // New format: UUID - fetch from published JSON file
+          const fileUrl = `${window.location.origin}/shares/published/${decodedToken}.json`;
+          const response = await fetch(fileUrl);
+          if (!response.ok) {
+            throw new Error('Published meet not found or has been unpublished.');
+          }
+          const data: StoredShareData = await response.json();
+          const events = data.events ? toSwimEvents(data.events) : [];
+          setSharedViewInfo(data.meetInfo ?? null);
+          setSharedViewEvents(events);
+          setSharedGeneratedAt(data.generatedAt ?? null);
+          setSharedViewError(null);
+        } else {
+          // Old format: compressed payload - decode directly
+          const payload = decodeSharePayload(decodedToken);
+          const events = payload.events ? toSwimEvents(payload.events) : [];
+          setSharedViewInfo(payload.meetInfo ?? null);
+          setSharedViewEvents(events);
+          setSharedGeneratedAt(payload.generatedAt ?? null);
+          setSharedViewError(null);
+        }
       } catch (err) {
         setSharedViewError(
           err instanceof Error ? err.message : 'Failed to load shared meet.',
@@ -652,15 +672,11 @@ const App: React.FC = () => {
       setPublishResult(null);
       const now = new Date().toISOString();
       const shareableEvents = toShareableEvents(editorEvents);
-      const payload: SharePayload = {
-        version: SHARE_VERSION,
-        meetInfo: editorMeetInfo,
-        events: shareableEvents,
-        generatedAt: selectedData.generatedAt || now,
-        storage: selectedMetadata.storage,
-        status: 'published',
-      };
-      const token = encodeSharePayload(payload);
+
+      // Check if there's already a published version with the same ID
+      const existingPublished = publishedMeets.find((m) => m.id === selectedMetadata.id);
+      
+      // Save to GitHub first to get the final ID
       const data: StoredShareData = {
         version: SHARE_VERSION,
         generatedAt: selectedData.generatedAt,
@@ -668,18 +684,31 @@ const App: React.FC = () => {
         meetInfo: editorMeetInfo,
         events: shareableEvents,
         status: 'published',
-        shareToken: token,
+        shareToken: undefined, // Will be set after we know the ID
       };
 
-      // Check if there's already a published version with the same ID
-      const existingPublished = publishedMeets.find((m) => m.id === selectedMetadata.id);
-      
+      // Pass the existing metadata (draft or published) so saveShareToGitHub can delete the old file
+      const existingMetadata = existingPublished || selectedMetadata;
+
       const { metadata, sha } = await saveShareToGitHub(
         data,
         'published',
         shareStoragePreferences,
-        existingPublished || (selectedMetadata.status === 'published' ? selectedMetadata : undefined),
+        existingMetadata,
       );
+
+      // Now use the UUID as the share token
+      const token = metadata.id;
+      data.shareToken = token;
+
+      // Update the file with the share token
+      await saveShareToGitHub(
+        data,
+        'published',
+        shareStoragePreferences,
+        { ...createMeetMetadata(data, metadata, sha), sha },
+      );
+
       const updatedMetadata = createMeetMetadata(data, metadata, sha);
       syncMeetLists(updatedMetadata, data);
       setSelectedMetadata(updatedMetadata);
