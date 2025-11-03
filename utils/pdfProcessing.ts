@@ -1,4 +1,4 @@
-const DEFAULT_PDF_PROXY_URL = 'https://api.allorigins.win/raw?url={{url}}';
+const DEFAULT_PDF_PROXY_URL = 'https://corsproxy.io/?{{url}}';
 
 declare const pdfjsLib: any;
 
@@ -50,7 +50,8 @@ const createProxyCandidates = (
   if (proxyUrl) {
     addCandidate(proxyUrl, 'Custom proxy');
   }
-  addCandidate(DEFAULT_PDF_PROXY_URL, 'AllOrigins');
+  addCandidate(DEFAULT_PDF_PROXY_URL, 'CORSProxy.io');
+  addCandidate('https://api.allorigins.win/raw?url={{url}}', 'AllOrigins (backup)');
   if (proxyApiKey && proxyApiKey.trim()) {
     addCandidate('https://proxy.cors.sh/{{url}}', 'proxy.cors.sh');
   }
