@@ -207,6 +207,66 @@ const App: React.FC = () => {
     copied: boolean;
   } | null>(null);
 
+  // Initialize configs from proxy if not in localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    (async () => {
+      try {
+        // Try localStorage first, then fetch from proxy
+        const localGeminiKey = localStorage.getItem(GEMINI_API_KEY_STORAGE_KEY);
+        const localGithubPrefs = localStorage.getItem(SHARE_STORAGE_PREFS_KEY);
+        
+        // Only fetch from proxy if localStorage is empty
+        const needsGeminiKey = !localGeminiKey;
+        const needsGithubConfig = !localGithubPrefs || (() => {
+          try {
+            const parsed = JSON.parse(localGithubPrefs) as ShareStoragePreferences;
+            return !parsed.githubToken;
+          } catch {
+            return true;
+          }
+        })();
+
+        if (needsGeminiKey || needsGithubConfig) {
+          const [geminiRes, githubRes] = await Promise.all([
+            needsGeminiKey ? fetch('https://emailapi.6ray.com/gemini_api') : null,
+            needsGithubConfig ? fetch('https://emailapi.6ray.com/github_api') : null,
+          ]);
+
+          // Load Gemini API key if not in localStorage
+          if (needsGeminiKey && geminiRes) {
+            const geminiData = await geminiRes.json();
+            if (geminiData.success && geminiData.apiKey) {
+              setApiKey(geminiData.apiKey);
+              // Store in sessionStorage only (not localStorage) to keep it temporary
+              sessionStorage.setItem(GEMINI_API_KEY_STORAGE_KEY, geminiData.apiKey);
+            }
+          }
+
+          // Load GitHub config if not in localStorage
+          if (needsGithubConfig && githubRes) {
+            const githubData = await githubRes.json();
+            if (githubData.success && githubData.token) {
+              setShareStoragePreferences({
+                githubOwner: githubData.config.owner || '',
+                githubRepo: githubData.config.repo || '',
+                githubBranch: githubData.config.branch || 'main',
+                githubFolder: githubData.config.basePath || 'public/shares',
+                githubToken: githubData.token,
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load config from proxy:', error);
+        // Silently fail - user can still configure manually
+      }
+    })();
+  }, []); // Run once on mount
+
   useEffect(() => {
     if (typeof window === 'undefined') {
       return;
