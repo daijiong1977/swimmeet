@@ -2,7 +2,7 @@ name: Deploy static site
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, html-share-works ]
   workflow_dispatch:
 
 permissions:
