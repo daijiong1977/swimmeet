@@ -1,4 +1,6 @@
 import {
+  compressToBase64,
+  decompressFromBase64,
   compressToEncodedURIComponent,
   decompressFromEncodedURIComponent,
 } from 'lz-string';
@@ -32,21 +34,29 @@ export const base64Decode = (input: string): string => {
 
 export const encodeSharePayload = (payload: SharePayload): string => {
   const json = JSON.stringify(payload);
-  const compressed = compressToEncodedURIComponent(json);
+  const compressed = compressToBase64(json);
   if (compressed) {
-    return `lz:${compressed}`;
+    return compressed;
   }
-  return `b64:${base64Encode(json)}`;
+  return base64Encode(json);
 };
 
 export const decodeSharePayload = (token: string): SharePayload => {
   let json: string | null = null;
-  if (token.startsWith('lz:')) {
+  
+  // Try lz-string base64 format first (new format)
+  json = decompressFromBase64(token);
+  
+  // Fallback to old lz: prefix format for backward compatibility
+  if (!json && token.startsWith('lz:')) {
     json = decompressFromEncodedURIComponent(token.slice(3));
   }
+  
+  // Fallback to plain base64
   if (!json) {
     const base = token.startsWith('b64:') ? token.slice(4) : token;
     json = base64Decode(base);
   }
+  
   return JSON.parse(json) as SharePayload;
 };
