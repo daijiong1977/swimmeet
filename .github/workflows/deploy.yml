@@ -28,12 +28,14 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Install Rollup native binary
+        if: runner.os == 'Linux'
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
+
       - name: Build site
         run: npm run build
         env:
           BASE_PATH: '/'
-          ROLLUP_SKIP_NODEJS_NATIVE: 'true'
-          ROLLUP_SKIP_NATIVE: 'true'
 
       - name: Copy CNAME into artifact
         if: ${{ hashFiles('CNAME') != '' }}
