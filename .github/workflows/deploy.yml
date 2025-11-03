@@ -56,11 +56,6 @@ jobs:
       pages: write
       id-token: write
     steps:
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        with:
-          static_site_generator: vite
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
