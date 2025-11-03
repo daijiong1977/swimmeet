@@ -291,7 +291,7 @@ const App: React.FC = () => {
         
         if (uuidPattern.test(decodedToken)) {
           // New format: UUID - fetch from published JSON file
-          const fileUrl = `${window.location.origin}/shares/published/${decodedToken}.json`;
+          const fileUrl = `${window.location.origin}/public/shares/published/${decodedToken}.json`;
           const response = await fetch(fileUrl);
           if (!response.ok) {
             throw new Error('Published meet not found or has been unpublished.');
@@ -860,45 +860,51 @@ const App: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-brand-blue">Swim Meet Builder</h1>
             <p className="text-sm text-gray-500">
-              Extract, edit, and publish swim meet events with AI assistance.
+              {isSharedUrlView 
+                ? 'Shared meet view - Read only'
+                : 'Extract, edit, and publish swim meet events with AI assistance.'}
             </p>
           </div>
-          <div className="flex gap-2 rounded-full bg-brand-blue/10 px-4 py-2 text-xs text-brand-blue">
-            <span>Gemini model: {model}</span>
-            <span className="hidden sm:inline">·</span>
-            <span>
-              Storage{' '}
-              {ensureStorageConfigured(shareStoragePreferences)
-                ? 'GitHub connected'
-                : 'Not configured'}
-            </span>
-          </div>
+          {!isSharedUrlView && (
+            <div className="flex gap-2 rounded-full bg-brand-blue/10 px-4 py-2 text-xs text-brand-blue">
+              <span>Gemini model: {model}</span>
+              <span className="hidden sm:inline">·</span>
+              <span>
+                Storage{' '}
+                {ensureStorageConfigured(shareStoragePreferences)
+                  ? 'GitHub connected'
+                  : 'Not configured'}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
       <main className="mx-auto mt-8 max-w-6xl px-4">
-        <nav className="mb-6 flex flex-wrap gap-2">
-          {(
-            [
-              { key: 'generate', label: 'Generate meets' },
-              { key: 'drafts', label: 'Draft meets' },
-              { key: 'shared', label: 'Meets shared' },
-            ] as Array<{ key: AppTab; label: string }>
-          ).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
-                activeTab === tab.key
-                  ? 'bg-brand-blue text-white shadow'
-                  : 'bg-white text-brand-blue hover:bg-brand-blue/10'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        {!isSharedUrlView && (
+          <nav className="mb-6 flex flex-wrap gap-2">
+            {(
+              [
+                { key: 'generate', label: 'Generate meets' },
+                { key: 'drafts', label: 'Draft meets' },
+                { key: 'shared', label: 'Meets shared' },
+              ] as Array<{ key: AppTab; label: string }>
+            ).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors ${
+                  activeTab === tab.key
+                    ? 'bg-brand-blue text-white shadow'
+                    : 'bg-white text-brand-blue hover:bg-brand-blue/10'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        )}
 
         {activeTab === 'generate' && (
           <GenerateTab
