@@ -1,0 +1,5 @@
+{
+  "name": "Swim Meet Event Extractor",
+  "description": "An application to upload a swim meet announcement PDF (as images) and extract event details. Users can then filter the events by stroke, age group, distance, and day.",
+  "requestFramePermissions": []
+}
