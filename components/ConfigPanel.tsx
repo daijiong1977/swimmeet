@@ -58,15 +58,15 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
         </svg>
       </button>
       {isOpen && (
-        <div className="p-6 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-6 border-t border-gray-200">
           {/* API and Model Settings */}
-          <div className="space-y-6">
+          <div className="space-y-6 max-w-2xl">
             {isProxyConfigured ? (
               // When proxy configured, only show model selection and a notice
               <>
                 <div className="p-4 bg-green-50 border-l-4 border-green-400 text-green-700 text-sm">
                   <p><strong>✓ Auto-configured</strong></p>
-                  <p className="mt-1">API credentials are automatically provided. You can still customize settings below if needed.</p>
+                  <p className="mt-1">API credentials are automatically provided. Ready to use!</p>
                 </div>
                 <div>
                   <label htmlFor="model" className="block text-sm font-medium text-gray-700">
@@ -131,8 +131,6 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 <option value="gemini-2.5-pro">Gemini 2.5 Pro (Most Accurate)</option>
               </select>
             </div>
-            </>
-            )}
             <div>
               <div className="flex items-center justify-between">
                 <label htmlFor="pdfProxyUrl" className="block text-sm font-medium text-gray-700">
@@ -174,37 +172,12 @@ const ConfigPanel: React.FC<ConfigPanelProps> = ({
                 When set, the value is sent as an <code className="bg-gray-200 px-1 rounded">x-cors-api-key</code> header.
               </p>
             </div>
-          </div>
-          
-          {/* Google Sheets Collaboration */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-gray-800">Google Sheets Collaboration</h3>
-            <p className="text-sm text-gray-600">
-              To collaborate with your athletes, follow these steps:
-            </p>
-            <ol className="list-decimal list-inside text-sm text-gray-600 space-y-2">
-              <li>Export the corrected event data to a CSV file using the button above.</li>
-              <li>In Google Sheets, go to <code className="bg-gray-200 p-1 rounded">File &gt; Import</code> and upload the CSV.</li>
-              <li>Share the new Google Sheet with your team.</li>
-              <li>Paste the shareable URL below to embed it in this app.</li>
-            </ol>
-             <div>
-              <label htmlFor="googleSheetUrl" className="block text-sm font-medium text-gray-700">
-                Google Sheet URL
-              </label>
-              <input
-                type="url"
-                id="googleSheetUrl"
-                value={googleSheetUrl}
-                onChange={(e) => setGoogleSheetUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-cyan focus:border-brand-cyan"
-              />
-            </div>
+            </>
+            )}
           </div>
 
           {!isProxyConfigured && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-2xl mt-8">
             <h3 className="font-semibold text-gray-800">Share Link Storage (GitHub)</h3>
             <p className="text-sm text-gray-600">
               Large meets generate oversized share links. Provide a GitHub Personal Access Token (classic, repo scope) and storage details to upload share payloads as JSON files in this repository. Links will then stay short for athletes.
